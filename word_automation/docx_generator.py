@@ -21,7 +21,7 @@ from docx.shared import Cm, Inches, Mm, Pt, RGBColor
 class PythonDocxCodeGenerator:
     """
     Generates and executes concise, robust python-docx code for file manipulation tasks.
-    Enforces safe table indexing, token-efficient code generation, and professional styling.
+    Supports creating new documents as well as referencing and editing existing documents without overwriting.
     """
 
     CONTEXT = r"""
@@ -34,70 +34,46 @@ from docx.shared import Inches, Pt, RGBColor, Cm, Mm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
-filename = 'output.docx'
-doc = Document(filename) if os.path.exists(filename) else Document()
+# 1. Opening/Creating Documents:
+# A) When creating a brand NEW document:
+# filename = 'new_doc.docx'
+# doc = Document()
 
-# 1. Document-Wide Typography:
-style = doc.styles['Normal']
-style.font.name = 'Georgia'  # Set requested font (e.g. Georgia, Calibri, Arial)
-style.font.size = Pt(11)     # Set requested font size
+# B) When editing an EXISTING document (Preserve existing content):
+# filename = 'existing_doc.docx'
+# doc = Document(filename)
 
-# 2. Section Heading & Title (Add ONCE):
-title_p = doc.add_paragraph()
-title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-t_run = title_p.add_run('Quantum Computing and Cryptography')
-t_run.bold = True
-t_run.font.size = Pt(16)
-title_p.paragraph_format.space_after = Pt(12)
+# 2. Modifying Existing Documents vs Appending:
+# To append a bullet point to existing list:
+# doc.add_paragraph('New bullet item text.', style='List Bullet')
 
-# 3. Granular Token-Level Styling (Acronyms Bold, Terms Italic, Milestone Years Red & Bold):
-def add_styled_paragraph(doc, text):
-    p = doc.add_paragraph()
-    tokens = re.split(r'(\s+|[.,;:!?\"\'()]+)', text.strip())
-    for t in tokens:
-        if not t: continue
-        if t.isspace() or t in '.,;:!?\"\'()':
-            p.add_run(t)
-            continue
-        clean = t.strip('.,;:!?\"\'()')
-        if not clean:
-            p.add_run(t)
-            continue
-        # Milestone Years (e.g., 1994, 2024, 1980s) -> Red and Bold
-        if re.match(r'^(19|20)\d\d(s)?$', clean):
-            r = p.add_run(t)
-            r.bold = True
-            r.font.color.rgb = RGBColor(255, 0, 0)
-        # Acronyms (e.g., RSA, NIST, Qubit, PQC, AES, ECC, DES) -> Bold
-        elif clean.isupper() or clean in {'Qubit', 'Qubits'}:
-            r = p.add_run(t)
-            r.bold = True
-        # Math & Physics terms -> Italic
-        elif clean.lower() in {'superposition', 'entanglement', 'qubits', 'decoherence', 'hamiltonian', 'lattice', 'logarithm', 'isogeny', 'polynomial'}:
-            r = p.add_run(t)
-            r.italic = True
-        else:
-            p.add_run(t)
+# To append a new section:
+# doc.add_heading('New Section Title', level=1)
+# doc.add_paragraph('New paragraph content...')
 
-# 4. Safe 4x4 Comparison Table (Never causes IndexErrors):
-headers = ['Criteria', 'Classical Cryptography', 'Quantum Threat', 'Post-Quantum Defense']
-data = [
-    ['Key Primitive', 'RSA / ECC (Factorization)', 'Shor Algorithm solves in polynomial time', 'Lattice (ML-KEM / ML-DSA)'],
-    ['Symmetric Security', 'AES-128 / AES-256', 'Grover Algorithm reduces security by half', 'Upgrade to AES-256'],
-    ['NIST Status', 'Legacy FIPS Standards', 'Vulnerable to Harvest-Now-Decrypt-Later', 'FIPS 203, 204, 205 Standards']
-]
-table = doc.add_table(rows=len(data) + 1, cols=len(headers))
-table.style = 'Table Grid'
-for c, h in enumerate(headers):
-    table.cell(0, c).text = h
-    if table.cell(0, c).paragraphs and table.cell(0, c).paragraphs[0].runs:
-        table.cell(0, c).paragraphs[0].runs[0].bold = True
-for r, row in enumerate(data, start=1):
-    for c, val in enumerate(row):
-        table.cell(r, c).text = str(val)
+# To edit existing paragraph text:
+# for p in doc.paragraphs:
+#     if 'Old Text' in p.text:
+#         p.text = p.text.replace('Old Text', 'Updated Text')
 
-# 5. Saving:
-doc.save(filename)
+# 3. Document-Wide Typography (Apply if requested):
+# style = doc.styles['Normal']
+# style.font.name = 'Calibri'  # or Georgia, Arial, etc.
+# style.font.size = Pt(11)
+
+# 4. Safe Table Creation (Visible Borders):
+# headers = ['Col 1', 'Col 2', 'Col 3']
+# data = [['A1', 'B1', 'C1'], ['A2', 'B2', 'C2']]
+# table = doc.add_table(rows=len(data) + 1, cols=len(headers))
+# table.style = 'Table Grid'
+# for c, h in enumerate(headers):
+#     table.cell(0, c).text = h
+# for r, row in enumerate(data, start=1):
+#     for c, val in enumerate(row):
+#         table.cell(r, c).text = str(val)
+
+# 5. Saving (Always save back to filename):
+# doc.save(filename)
 """
 
     def _extract_clean_code(self, raw_content: str) -> str:
@@ -160,14 +136,13 @@ Generate concise, accurate, production-ready Python code using the python-docx l
 
 CRITICAL RULES:
 1. Generate ONLY valid, executable Python code with all necessary imports.
-2. Be CONCISE and TOKEN-LEAN. Do not write repetitive code or unnecessary comments.
-3. PERSISTENCE: Use `doc = Document(filename) if os.path.exists(filename) else Document()` so subtasks layer cleanly.
-4. TYPOGRAPHY: Set font family and font size globally on `doc.styles['Normal']`.
-5. FORMATTING RULES: If requested (e.g. bold acronyms, italic terms, red milestone years), define a clean helper `add_styled_paragraph(doc, text)` as shown in the reference.
-6. NO UNREQUESTED PAGE BREAKS: Do NOT insert empty manual page breaks; let continuous paragraphs fill the document.
-7. TABLES: Use `table.cell(r, c).text = ...` and `table.style = 'Table Grid'`.
-8. Always save the document with `doc.save(filename)`.
-9. No conversational explanations, output ONLY executable Python code."""
+2. Be CONCISE and TOKEN-LEAN.
+3. PRESERVE EXISTING FILES: If the task instruction says to open/edit an existing document, load it with `doc = Document(filename)` and DO NOT overwrite existing paragraphs unless instructed.
+4. NEW FILES: If the task instruction specifies creating a new document from scratch, use `doc = Document()`.
+5. BULLET POINTS: Put bullet text directly into `doc.add_paragraph('Bullet text', style='List Bullet')`.
+6. TABLES: Use `table.cell(r, c).text = ...` and `table.style = 'Table Grid'`.
+7. Always save the document at the end with `doc.save(filename)`.
+8. No conversational explanations, output ONLY executable Python code."""
 
         user_content = task_description
         if error_context:

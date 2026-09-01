@@ -9,12 +9,14 @@ class TaskDecomposer:
     """
     Uses Nemotron to intelligently break down complex, multi-part, or page-budgeted tasks
     into sequential, layered sub-tasks routed to FILE_MANIPULATION (python-docx) or APP_CONTROL (AppleScript).
+    Supports editing existing documents without overwriting, as well as creating new documents.
     """
 
     FILE_MANIPULATION_KEYWORDS = [
         "text", "image", "table", "format", "paragraph", "heading", "style",
         "content", "add", "create", "document", "section", "essay", "report",
-        "page", "form field", "form fields", "fillable", "checkbox", "signature", "nda", "proposal"
+        "page", "form field", "form fields", "fillable", "checkbox", "signature",
+        "nda", "proposal", "edit", "modify", "update", "append", "insert", "replace"
     ]
 
     APP_CONTROL_KEYWORDS = [
@@ -70,11 +72,12 @@ class TaskDecomposer:
         user_request: str,
         nemotron_client: Any,
         model: str = "nvidia/nemotron-3-super-120b-a12b",
+        doc_context: Optional[str] = None,
     ) -> List[Dict[str, str]]:
         """
         Use Nemotron to break complex requests into sequential sub-tasks.
         """
-        subtasks, _ = self.decompose_with_usage(user_request, nemotron_client, model)
+        subtasks, _ = self.decompose_with_usage(user_request, nemotron_client, model, doc_context)
         return subtasks
 
     def decompose_with_usage(
@@ -82,6 +85,7 @@ class TaskDecomposer:
         user_request: str,
         nemotron_client: Any,
         model: str = "nvidia/nemotron-3-super-120b-a12b",
+        doc_context: Optional[str] = None,
     ) -> Tuple[List[Dict[str, str]], int]:
         """
         Decompose user request into sequential sub-tasks and return token usage.
@@ -90,21 +94,23 @@ class TaskDecomposer:
         page_match = re.search(r"\b(\d+)\s+pages?\b", user_request, re.IGNORECASE)
         page_count = int(page_match.group(1)) if page_match else 0
 
+        doc_context_prompt = ""
+        if doc_context:
+            doc_context_prompt = f"\nEXISTING DOCUMENT CONTEXT:\n{doc_context}\nNOTE: The document already exists. Do NOT overwrite it; generate sub-tasks that open and edit/append to the existing file while preserving its contents.\n"
+
         system_prompt = f"""You are a task decomposition expert for Word automation.
 Decompose the user request into minimal, concise, sequential sub-tasks.
-
-CRITICAL PAGE BUDGETING RULE:
-{f"- The user explicitly requested {page_count} PAGES. You MUST output EXACTLY {page_count} sequential FILE_MANIPULATION sub-tasks (Page 1 to Page {page_count}), each covering ~450 words of distinct content plus requested tables/formatting." if page_count > 1 else "- For standard documents, output 1-3 sequential sub-tasks."}
-
-ROUTING:
-- FILE_MANIPULATION: Creating files, text, tables, form fields, checkboxes, styles.
-- APP_CONTROL: ONLY for live macOS Word runtime controls (Track Changes, Print, PDF export, VBA).
+{doc_context_prompt}
+CRITICAL RULES:
+1. EXISTING DOCUMENTS: If editing an existing document, sub-tasks should open the existing file and perform the requested edits/additions without wiping existing content.
+2. PAGE BUDGETING: If creating a new multi-page document requesting '{page_count} pages', output exactly {page_count} sequential FILE_MANIPULATION sub-tasks.
+3. ROUTING:
+   - FILE_MANIPULATION: Creating files, editing text, tables, form fields, checkboxes, styles, appending sections.
+   - APP_CONTROL: ONLY for live macOS Word runtime controls (Track Changes, Print, PDF export, VBA).
 
 Output ONLY a valid JSON list of objects:
 [
-  {{"type": "FILE_MANIPULATION", "description": "Page 1: Initialize document, apply global font/size, Title, write Section 1 (~450 words) with formatting rules."}},
-  {{"type": "FILE_MANIPULATION", "description": "Page 2: Open document, write Section 2 (~450 words) with formatting rules."}},
-  {{"type": "FILE_MANIPULATION", "description": "Page 3: Open document, insert comparison table and write Section 3 (~350 words) with formatting rules."}}
+  {{"type": "FILE_MANIPULATION", "description": "Open existing 'memo.docx' and add a 3rd bullet point summarizing QA results."}}
 ]"""
 
         tokens_used = 0
